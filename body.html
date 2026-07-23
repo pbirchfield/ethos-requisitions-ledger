@@ -1,0 +1,26 @@
+<div id="req-root">
+  <div class="req-header">
+    <div class="brand-lockup">
+      <img src="/ethos-logo.png" alt="Ethos Solutions" />
+      <div class="brand-divider"></div>
+      <div>
+        <h1>Requisition Ledger</h1>
+        <p class="sub">Standardized intake &amp; approval tracker &mdash; every open role, <b>one form</b>, one place.</p>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button class="btn btn-ghost btn-small" id="settings-btn">Approver access code</button>
+      <button class="btn btn-primary" id="new-req-btn">+ New Requisition</button>
+    </div>
+  </div>
+
+  <div class="ledger-strip" id="ledger-strip"></div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="search-row">
+    <input type="text" id="search-input" placeholder="Filter by department, title, or hiring manager…" />
+    <button class="btn btn-ghost" id="export-btn">Export CSV</button>
+  </div>
+
+  <div id="list-area"></div>
+</div>
