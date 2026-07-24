@@ -21,7 +21,7 @@
   const STATUSES = ["Draft","Pending Approval","Approved","Posted","Interviewing","Filled","Cancelled"];
   const DEPT_TITLES = {
     "100-Renewables": ["Civil Inspector","Director Renewable Services","Electrical Inspector","Fleet Manager","Lead - Renewables","Logistics Tech II - Renewables","Office Administrator","Operations Support Manager","Site Manager","Superintendent","Tech I - Renewables","Tech II - Renewables","Tech III - Renewables","Temporary Technician"],
-    "200-Telecom": ["Apprentice Electrician","Construction Manager","Director Telecom Services","Field Construction Manager","Journeyman Electrician","Lead - Telecom","Master Electrician","Materials Coordinator","Materials Manager","Program Manager","Project Coordinator","Tech I - Telecom","Tech II - Telecom","Tech III - Telecom","Telecom Business Operations Manager"],
+    "200-Telecom": ["Apprentice Electrician","Construction Manager","Director Telecom Services","Field Construction Manager","Fleet Manager","Journeyman Electrician","Lead - Telecom","Master Electrician","Materials Coordinator","Materials Manager","Program Manager","Project Coordinator","Tech I - Telecom","Tech II - Telecom","Tech III - Telecom","Telecom Business Operations Manager"],
     "300-Office": ["Accounting Supervisor","Accounts Payable Specialist","Administrative Assistant","Chief Executive Officer","Chief Financial Officer","Controller","Fleet Manager","HR Coordinator","Human Resources Manager","Intern","Office Administrator","Payroll Manager","President","Project Controls","Project Coordinator","Recruiter - Part time","Recruiter Specialist","Safety & Training Manager"]
   };
   const STATUS_CLASS = {
@@ -180,7 +180,6 @@
   }
 
   function ticketHtml(r){
-    const salary = (r.salaryMin || r.salaryMax) ? `$${r.salaryMin||'?'}–$${r.salaryMax||'?'}` : '—';
     return `
       <div class="ticket" id="ticket-${r.id}">
         <div class="ticket-summary">
@@ -191,7 +190,10 @@
           <div class="meta">
             <b>${escapeHtml(r.department||'—')}</b> · ${escapeHtml(r.hiringManager||'—')}<br/>
             ${escapeHtml(r.employmentType||'—')} · ${escapeHtml(r.location||'—')}<br/>
-            Headcount ${r.headcount||1} · Target start ${r.targetStartDate||'—'} · Salary ${salary}
+            Headcount ${r.headcount||1} · Target start ${r.targetStartDate||'—'}<br/>
+            ${r.customerProject ? `Customer/Project: ${escapeHtml(r.customerProject)}<br/>` : ''}
+            ${r.travelPercent ? `Travel ${escapeHtml(r.travelPercent)}%<br/>` : ''}
+            ${r.presentToCustomer === 'Yes' ? `Presents to customer for selection (${escapeHtml(r.presentCount||'?')})<br/>` : ''}
           </div>
           <div class="priority-flag"><span class="priority-dot ${PRIORITY_CLASS[r.priority]||'p-low'}"></span>${r.priority||'Low'} priority</div>
           ${archiveNote(r)}
@@ -218,6 +220,27 @@
         <div class="field full">
           <label>Customer calls this role</label>
           <input data-f="customerTitle" data-id="${r.id}" value="${escapeHtml(r.customerTitle||'')}" placeholder="e.g. Assistant Site Manager — same as our Superintendent" />
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Customer / Project</label><input data-f="customerProject" data-id="${r.id}" value="${escapeHtml(r.customerProject||'')}" /></div>
+          <div class="field"><label>Travel %</label><input data-f="travelPercent" data-id="${r.id}" type="number" min="0" max="100" value="${escapeHtml(r.travelPercent||'')}" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Present candidates to customer?</label>
+            <select data-f="presentToCustomer" data-id="${r.id}">
+              <option value="No" ${r.presentToCustomer!=='Yes'?'selected':''}>No</option>
+              <option value="Yes" ${r.presentToCustomer==='Yes'?'selected':''}>Yes</option>
+            </select>
+          </div>
+          <div class="field"><label>How many candidates?</label><input data-f="presentCount" data-id="${r.id}" type="number" min="1" value="${escapeHtml(r.presentCount||'')}" /></div>
+        </div>
+        <div class="field full">
+          <label>Requirements (certs, e.g. SGRE eLearning profile, GWO BST, BTT, ART)</label>
+          <textarea data-f="requirements" data-id="${r.id}">${escapeHtml(r.requirements||'')}</textarea>
+        </div>
+        <div class="field full">
+          <label>Skills (if not already covered in job description)</label>
+          <textarea data-f="skills" data-id="${r.id}">${escapeHtml(r.skills||'')}</textarea>
         </div>
         <div class="field full">
           <label>Justification</label>
@@ -307,8 +330,10 @@
     const columns = [
       ["id","Req ID"],["title","Job Title"],["isNewTitleRequest","New Title Request"],
       ["customerTitle","Customer-Facing Title"],["department","Department"],["hiringManager","Hiring Manager"],
-      ["employmentType","Employment Type"],["location","Location"],["headcount","Headcount"],
-      ["salaryMin","Salary Min"],["salaryMax","Salary Max"],["targetStartDate","Target Start Date"],
+      ["customerProject","Customer / Project"],["employmentType","Employment Type"],["location","Location"],
+      ["headcount","Headcount"],["targetStartDate","Target Start Date"],["travelPercent","Travel %"],
+      ["presentToCustomer","Present Candidates to Customer"],["presentCount","How Many Candidates"],
+      ["requirements","Requirements"],["skills","Skills"],
       ["priority","Priority"],["status","Status"],["justification","Justification"],["notes","Approver Notes"],
       ["createdAt","Created At"],["updatedAt","Last Updated"],["statusChangedAt","Status Changed At"]
     ];
@@ -368,9 +393,12 @@
           <div class="field full"><label>Hiring manager *</label><input id="f-manager" placeholder="e.g. Jordan Lee" /></div>
         </div>
         <div class="field-row">
+          <div class="field full"><label>Customer / Project</label><input id="f-customer-project" placeholder="e.g. Acme Solar — Phase 2" /></div>
+        </div>
+        <div class="field-row">
           <div class="field"><label>Employment type</label>
             <select id="f-type">
-              <option selected>Full-time</option><option>Part-time</option><option>Contract</option><option>Intern</option>
+              <option selected>Full-time</option><option>Part-time</option><option>Contract</option><option>Intern</option><option>Temporary</option>
             </select>
           </div>
           <div class="field"><label>Location</label><input id="f-location" placeholder="e.g. Remote (US), Denver-hybrid" /></div>
@@ -380,14 +408,32 @@
           <div class="field"><label>Target start date</label><input id="f-start" type="date" /></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Salary min ($)</label><input id="f-salmin" type="number" placeholder="e.g. 110000" /></div>
-          <div class="field"><label>Salary max ($)</label><input id="f-salmax" type="number" placeholder="e.g. 140000" /></div>
+          <div class="field"><label>Travel %</label><input id="f-travel" type="number" min="0" max="100" placeholder="e.g. 25" /></div>
+          <div class="field"><label>Priority</label>
+            <select id="f-priority">
+              <option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Present candidates to customer for selection?</label>
+            <select id="f-present-customer">
+              <option value="No" selected>No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          <div class="field" id="present-count-field" style="display:none;">
+            <label>How many candidates?</label>
+            <input id="f-present-count" type="number" min="1" placeholder="e.g. 3" />
+          </div>
         </div>
         <div class="field full">
-          <label>Priority</label>
-          <select id="f-priority">
-            <option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option>
-          </select>
+          <label>Requirements (certs, e.g. SGRE eLearning profile, GWO BST, BTT, ART)</label>
+          <textarea id="f-requirements" placeholder="List required certifications / training"></textarea>
+        </div>
+        <div class="field full">
+          <label>Skills (if not already covered in job description)</label>
+          <textarea id="f-skills" placeholder="Optional — only if this role needs skills beyond the standard job description"></textarea>
         </div>
         <div class="field full">
           <label>Justification (backfill / new headcount / growth)</label>
@@ -423,6 +469,13 @@
       if(!isOther) otherInput.value = '';
     });
 
+    const presentSelect = overlay.querySelector('#f-present-customer');
+    const presentCountField = overlay.querySelector('#present-count-field');
+    presentSelect.addEventListener('change', ()=>{
+      presentCountField.style.display = presentSelect.value === 'Yes' ? '' : 'none';
+      if(presentSelect.value !== 'Yes') overlay.querySelector('#f-present-count').value = '';
+    });
+
     async function submit(status){
       const isOtherTitle = titleSelect.value === '__other__';
       const title = isOtherTitle ? overlay.querySelector('#f-title-other').value.trim() : overlay.querySelector('#f-title').value.trim();
@@ -440,13 +493,17 @@
         title, department, hiringManager: manager,
         isNewTitleRequest: isOtherTitle,
         customerTitle: overlay.querySelector('#f-title-customer').value.trim(),
+        customerProject: overlay.querySelector('#f-customer-project').value.trim(),
         employmentType: overlay.querySelector('#f-type').value,
         location: overlay.querySelector('#f-location').value.trim(),
         headcount: parseInt(overlay.querySelector('#f-headcount').value)||1,
-        salaryMin: overlay.querySelector('#f-salmin').value,
-        salaryMax: overlay.querySelector('#f-salmax').value,
         targetStartDate: overlay.querySelector('#f-start').value,
+        travelPercent: overlay.querySelector('#f-travel').value,
         priority: overlay.querySelector('#f-priority').value,
+        presentToCustomer: presentSelect.value,
+        presentCount: presentSelect.value === 'Yes' ? overlay.querySelector('#f-present-count').value : '',
+        requirements: overlay.querySelector('#f-requirements').value.trim(),
+        skills: overlay.querySelector('#f-skills').value.trim(),
         justification: overlay.querySelector('#f-justification').value.trim(),
         status: status,
         notes: '',
