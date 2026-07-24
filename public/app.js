@@ -243,8 +243,14 @@
           <textarea data-f="skills" data-id="${r.id}">${escapeHtml(r.skills||'')}</textarea>
         </div>
         <div class="field full">
-          <label>Justification</label>
-          <textarea data-f="justification" data-id="${r.id}">${escapeHtml(r.justification||'')}</textarea>
+          <label>Reason for requisition</label>
+          <select data-f="reason" data-id="${r.id}">
+            ${["Backfill","New Headcount","Growth","Other"].map(o=>`<option ${o===r.reason?'selected':''}>${o}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field full">
+          <label>Comments</label>
+          <textarea data-f="comments" data-id="${r.id}" placeholder="Any additional details, context, or notes for this requisition…">${escapeHtml(r.comments||'')}</textarea>
         </div>
         <div class="field-row">
           <div class="field">
@@ -334,7 +340,7 @@
       ["headcount","Headcount"],["targetStartDate","Target Start Date"],["travelPercent","Travel %"],
       ["presentToCustomer","Present Candidates to Customer"],["presentCount","How Many Candidates"],
       ["requirements","Requirements"],["skills","Skills"],
-      ["priority","Priority"],["status","Status"],["justification","Justification"],["notes","Approver Notes"],
+      ["priority","Priority"],["status","Status"],["reason","Reason"],["comments","Comments"],["notes","Approver Notes"],
       ["createdAt","Created At"],["updatedAt","Last Updated"],["statusChangedAt","Status Changed At"]
     ];
     const header = columns.map(c=>csvEscape(c[1])).join(',');
@@ -436,8 +442,17 @@
           <textarea id="f-skills" placeholder="Optional — only if this role needs skills beyond the standard job description"></textarea>
         </div>
         <div class="field full">
-          <label>Justification (backfill / new headcount / growth)</label>
-          <textarea id="f-justification" placeholder="Why this role, why now…"></textarea>
+          <label>Reason for requisition</label>
+          <select id="f-reason">
+            <option>Backfill</option>
+            <option>New Headcount</option>
+            <option>Growth</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>Comments</label>
+          <textarea id="f-comments" placeholder="Any additional details, context, or notes for this requisition…"></textarea>
         </div>
         <div class="panel-actions">
           <button class="btn btn-ghost" id="cancel-btn">Cancel</button>
@@ -504,7 +519,8 @@
         presentCount: presentSelect.value === 'Yes' ? overlay.querySelector('#f-present-count').value : '',
         requirements: overlay.querySelector('#f-requirements').value.trim(),
         skills: overlay.querySelector('#f-skills').value.trim(),
-        justification: overlay.querySelector('#f-justification').value.trim(),
+        reason: overlay.querySelector('#f-reason').value,
+        comments: overlay.querySelector('#f-comments').value.trim(),
         status: status,
         notes: '',
         createdAt: now,
