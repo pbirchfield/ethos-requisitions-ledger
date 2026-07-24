@@ -294,11 +294,9 @@
       });
     });
     ticketEl.querySelectorAll('[data-action="delete"]').forEach(btn=>{
-      btn.addEventListener('click', async (e)=>{
+      btn.addEventListener('click', (e)=>{
         e.stopPropagation();
-        requisitions = requisitions.filter(x=>x.id!==r.id);
-        await persist();
-        render();
+        openDeleteGate(r);
       });
     });
     ticketEl.querySelectorAll('[data-action="promote"]').forEach(btn=>{
@@ -607,6 +605,33 @@
       r.promotedAt = new Date().toISOString();
       r.updatedAt = r.promotedAt;
       await persistCustomTitles();
+      await persist();
+      overlay.remove();
+      render();
+    });
+  }
+
+  function openDeleteGate(r){
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `
+      <div class="panel" style="max-width:420px;">
+        <h2>Delete "${escapeHtml(r.title||'this requisition')}"</h2>
+        <p class="panel-sub">This permanently removes ${r.id} and cannot be undone. Requires approver access code.</p>
+        <div class="field full"><label>Access code</label><input type="text" id="d-code" placeholder="Enter approver access code" /></div>
+        <div class="panel-actions">
+          <button class="btn btn-ghost" id="d-cancel">Cancel</button>
+          <button class="btn btn-danger" id="d-confirm">Delete permanently</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+    overlay.querySelector('#d-cancel').addEventListener('click', ()=>overlay.remove());
+    overlay.querySelector('#d-confirm').addEventListener('click', async ()=>{
+      const code = overlay.querySelector('#d-code').value;
+      if(code !== currentPasscode()){ alert('Incorrect access code.'); return; }
+      requisitions = requisitions.filter(x=>x.id!==r.id);
       await persist();
       overlay.remove();
       render();
