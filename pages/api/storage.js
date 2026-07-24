@@ -1,31 +1,45 @@
 // pages/api/storage.js
 //
-// Minimal key-value storage API, backed by Upstash Redis (via the
-// Vercel KV / Upstash marketplace integration). This mirrors the shape
-// of Claude's window.storage.get/set so the frontend code barely changed.
+// Minimal key-value storage API backed by Vercel's Redis (Redis Cloud)
+// integration, which injects a single connection string:
+//   STORAGE_REDIS_URL
 //
-// Env vars required (auto-added if you use the Vercel "Upstash" or "KV"
-// integration from your project's Storage tab):
-//   UPSTASH_REDIS_REST_URL
-//   UPSTASH_REDIS_REST_TOKEN
+// We reuse one Redis client across warm serverless invocations instead
+// of reconnecting on every request (reconnecting every time works, but
+// is slower and can exhaust connections under load).
 
-import { Redis } from "@upstash/redis";
+import { createClient } from "redis";
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
-
-// Only these keys can be read/written — prevents this endpoint from
-// being used as an arbitrary key-value store by a stray request.
 const ALLOWED_KEYS = new Set(["requisitions", "customTitles", "approverPasscode"]);
 
 function keyFor(key) {
   return `ethos-req:${key}`;
 }
 
+// Cache the client on the global object so it survives across
+// invocations of the same warm serverless instance.
+let clientPromise = global._redisClientPromise;
+
+function getClient() {
+  if (!clientPromise) {
+    const client = createClient({ url: process.env.STORAGE_REDIS_URL });
+    client.on("error", (err) => console.error("Redis client error", err));
+    clientPromise = client.connect().then(() => client);
+    global._redisClientPromise = clientPromise;
+  }
+  return clientPromise;
+}
+
 export default async function handler(req, res) {
   const { method } = req;
+
+  let client;
+  try {
+    client = await getClient();
+  } catch (err) {
+    console.error("Redis connection failed", err);
+    return res.status(500).json({ error: "Could not connect to storage" });
+  }
 
   if (method === "GET") {
     const key = req.query.key;
@@ -33,14 +47,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid or missing key" });
     }
     try {
-      const value = await redis.get(keyFor(key));
+      const value = await client.get(keyFor(key));
       if (value === null || value === undefined) {
         return res.status(404).json({ error: "Not found" });
       }
-      // Upstash may already return a parsed object; normalize to a string
-      // the same way window.storage did, so JSON.parse() on the client works.
-      const stringValue = typeof value === "string" ? value : JSON.stringify(value);
-      return res.status(200).json({ key, value: stringValue });
+      return res.status(200).json({ key, value });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ error: "Storage read failed" });
@@ -56,7 +67,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Value must be a string" });
     }
     try {
-      await redis.set(keyFor(key), value);
+      await client.set(keyFor(key), value);
       return res.status(200).json({ key, value });
     } catch (err) {
       console.error(err);
