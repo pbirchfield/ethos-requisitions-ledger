@@ -46,8 +46,14 @@
     const now = new Date();
     const yy = String(now.getFullYear()).slice(2);
     const mm = String(now.getMonth()+1).padStart(2,'0');
-    const seq = String(Math.floor(Math.random()*900)+100);
-    return `REQ-${yy}${mm}-${seq}`;
+    let id;
+    let attempts = 0;
+    do{
+      const seq = String(Math.floor(Math.random()*9000)+1000); // 4 digits: far fewer collisions
+      id = `REQ-${yy}${mm}-${seq}`;
+      attempts++;
+    } while(requisitions.some(r=>r.id===id) && attempts < 50);
+    return id;
   }
 
   function titlesForDept(dept){
@@ -106,6 +112,25 @@
       console.error('Load approverPasscode failed', e);
     }
     storageReady = true;
+
+    // Self-heal: earlier versions of this tool could generate duplicate
+    // requisition IDs (3-digit random suffix). A duplicate ID causes edits
+    // to silently apply to the wrong requisition. Fix any found on load.
+    const seen = new Set();
+    let dedupedAny = false;
+    requisitions.forEach(r=>{
+      if(seen.has(r.id)){
+        r.id = genId();
+        r.updatedAt = new Date().toISOString();
+        dedupedAny = true;
+      }
+      seen.add(r.id);
+    });
+    if(dedupedAny){
+      await persist();
+      showStorageBanner("Found and fixed duplicate requisition IDs from an earlier version of this tool. If a requisition's edits weren't saving before, try again now.");
+    }
+
     render();
     if(hadError){
       showStorageBanner('Could not load saved data from the database. Requisitions shown may be incomplete or missing — check the database connection.');
@@ -190,15 +215,15 @@
       listArea.innerHTML = `<div class="empty-state"><b>No matches</b>Nothing fits this filter. Try a different tab or search term.</div>`;
       return;
     }
-    listArea.innerHTML = `<div class="grid">${items.map(ticketHtml).join('')}</div>`;
-    items.forEach(r=>{
-      const el = document.getElementById(`ticket-${r.id}`);
+    listArea.innerHTML = `<div class="grid">${items.map((r, idx)=>ticketHtml(r, idx)).join('')}</div>`;
+    items.forEach((r, idx)=>{
+      const el = document.getElementById(`ticket-slot-${idx}`);
       el.querySelector('.ticket-summary').addEventListener('click', ()=>{
         r._expanded = !r._expanded;
         renderList();
       });
       if(r._expanded){
-        bindDetailEvents(r);
+        bindDetailEvents(r, idx);
       }
     });
   }
@@ -215,9 +240,9 @@
     return `<div style="font-size:11.5px; color:var(--muted); margin-top:6px;">Auto-archives in ${daysLeft} day${daysLeft===1?'':'s'}</div>`;
   }
 
-  function ticketHtml(r){
+  function ticketHtml(r, idx){
     return `
-      <div class="ticket" id="ticket-${r.id}">
+      <div class="ticket" id="ticket-slot-${idx}">
         <div class="ticket-summary">
           <div class="stamp ${STATUS_CLASS[r.status]||'stamp-draft'}">${r.status}</div>
           <div class="req-id">${r.id}</div>
@@ -314,8 +339,8 @@
     `;
   }
 
-  function bindDetailEvents(r){
-    const ticketEl = document.getElementById(`ticket-${r.id}`);
+  function bindDetailEvents(r, idx){
+    const ticketEl = document.getElementById(`ticket-slot-${idx}`);
     ticketEl.querySelectorAll('[data-action="save"]').forEach(btn=>{
       btn.addEventListener('click', async (e)=>{
         e.stopPropagation();
