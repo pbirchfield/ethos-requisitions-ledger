@@ -58,43 +58,79 @@
     return approverPasscode || DEFAULT_PASSCODE;
   }
 
+  function showStorageBanner(message){
+    let banner = document.getElementById('storage-banner');
+    if(!banner){
+      banner = document.createElement('div');
+      banner.id = 'storage-banner';
+      banner.style.cssText = 'position:sticky; top:0; z-index:100; background:var(--rust); color:#fff; padding:10px 16px; font-size:13px; font-family:"IBM Plex Sans",sans-serif; display:flex; justify-content:space-between; align-items:center; gap:12px; border-radius:4px; margin-bottom:14px;';
+      const root = document.getElementById('req-root');
+      root.insertBefore(banner, root.firstChild);
+    }
+    banner.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = message;
+    const btn = document.createElement('button');
+    btn.textContent = 'Dismiss';
+    btn.style.cssText = 'background:transparent;border:1px solid #fff;color:#fff;border-radius:3px;padding:4px 10px;cursor:pointer;font-size:12px;';
+    btn.addEventListener('click', ()=> banner.remove());
+    banner.appendChild(span);
+    banner.appendChild(btn);
+  }
+
   async function loadData(){
     listArea.innerHTML = '<p class="loading-note">Loading requisitions…</p>';
+    let hadError = false;
     try{
       const res = await apiGet('requisitions');
       requisitions = res && res.value ? JSON.parse(res.value) : [];
     }catch(e){
       requisitions = [];
+      hadError = true;
+      console.error('Load requisitions failed', e);
     }
     try{
       const res2 = await apiGet('customTitles');
       customTitles = res2 && res2.value ? JSON.parse(res2.value) : {};
     }catch(e){
       customTitles = {};
+      hadError = true;
+      console.error('Load customTitles failed', e);
     }
     try{
       const res3 = await apiGet('approverPasscode');
       approverPasscode = res3 && res3.value ? res3.value : null;
     }catch(e){
       approverPasscode = null;
+      hadError = true;
+      console.error('Load approverPasscode failed', e);
     }
     storageReady = true;
     render();
+    if(hadError){
+      showStorageBanner('Could not load saved data from the database. Requisitions shown may be incomplete or missing — check the database connection.');
+    }
   }
 
   async function persist(){
     try{
       await apiSet('requisitions', JSON.stringify(requisitions));
+      return true;
     }catch(e){
       console.error('Storage error', e);
+      showStorageBanner('Your change was NOT saved — the database write failed. Check your connection and try again.');
+      return false;
     }
   }
 
   async function persistCustomTitles(){
     try{
       await apiSet('customTitles', JSON.stringify(customTitles));
+      return true;
     }catch(e){
       console.error('Storage error', e);
+      showStorageBanner('Your change was NOT saved — the database write failed. Check your connection and try again.');
+      return false;
     }
   }
 
